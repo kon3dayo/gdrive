@@ -783,6 +783,142 @@ dialog { color: var(--text); }
   .view-tools .sort-select { display: none; }
 }
 
+/* ---------- 遠隔ログイン（ペアリング） ---------- */
+.login-sub-btn { margin-top: 10px; }
+.btn-sm { height: 34px; padding: 0 14px; font-size: 13px; }
+
+.pair-banner {
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--primary);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.pair-banner-head { display: flex; align-items: center; gap: 10px; }
+.pair-banner-head .ms { font-size: 28px; color: var(--primary); }
+.pair-banner-code { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+.pair-banner-code span { font-weight: 700; color: var(--primary); font-family: ui-monospace, monospace; font-size: 15px; }
+.pair-banner-desc { font-size: 13px; line-height: 1.6; color: var(--text-2); margin: 10px 0 0; }
+.pair-banner-done { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+
+.remote-session-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 100px;
+  border: 1px solid var(--primary);
+  background: var(--primary-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+.remote-session-badge .ms { font-size: 16px; }
+
+.modal-wide { width: min(94vw, 540px); }
+
+.remote-pair-box {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  gap: 20px;
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: 16px;
+  padding: 18px;
+  margin: 16px 0;
+}
+.remote-qr {
+  width: 168px;
+  height: 168px;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 10px;
+  display: grid;
+  place-items: center;
+}
+.remote-qr svg { width: 100%; height: 100%; display: block; }
+.remote-code-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.remote-code-label { font-size: 12px; color: var(--text-3); }
+.remote-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+  line-height: 1.1;
+}
+.remote-wait-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.dot-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse { 50% { opacity: 0.25; transform: scale(0.8); } }
+
+.code-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.remote-send-status {
+  margin: 12px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.remote-revoke-bar {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.remote-manual-details {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.remote-manual-details summary {
+  cursor: pointer;
+  color: var(--text-3);
+  user-select: none;
+  padding: 4px 0;
+}
+
+@media (max-width: 560px) {
+  .remote-pair-box {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+  .remote-code-box { align-items: center; }
+  #remote-badge-text { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

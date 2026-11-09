@@ -6,7 +6,7 @@ import { CONFIG, SCOPES } from './config.js';
 
 const TOKEN_KEY = 'drivebox.token';
 let tokenClient = null;
-let token = null; // { access_token, expires_at }
+let token = null; // { access_token, expires_at, remote?: boolean }
 
 export function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -26,17 +26,18 @@ export function isConfigured() {
 }
 
 export async function initAuth() {
+  // 同じタブ内のリロードではログイン状態を維持（トークンの有効期限は約 1 時間）
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
+    if (saved && saved.expires_at > Date.now() + 60_000) token = saved;
+  } catch { /* ignore */ }
+
   await loadScript('https://accounts.google.com/gsi/client');
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CONFIG.CLIENT_ID,
     scope: SCOPES,
     callback: () => {},
   });
-  // 同じタブ内のリロードではログイン状態を維持（トークンの有効期限は約 1 時間）
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
-    if (saved && saved.expires_at > Date.now() + 60_000) token = saved;
-  } catch { /* ignore */ }
 }
 
 /** ログインポップアップを表示してトークンを取得（ユーザー操作から呼ぶこと） */
@@ -50,6 +51,7 @@ export function signIn({ prompt = '' } = {}) {
       token = {
         access_token: resp.access_token,
         expires_at: Date.now() + Number(resp.expires_in) * 1000,
+        remote: false,
       };
       sessionStorage.setItem(TOKEN_KEY, JSON.stringify(token));
       localStorage.setItem('drivebox.signedIn', '1');
@@ -62,8 +64,36 @@ export function signIn({ prompt = '' } = {}) {
   });
 }
 
+/** 遠隔ログインで受け取ったトークンをセット（sessionStorage のみに保存し、タブを閉じたら消える） */
+export function setRemoteToken({ access_token, expires_at }) {
+  if (!access_token || !expires_at || expires_at <= Date.now() + 30_000) {
+    throw new Error('トークンの有効期限が切れています');
+  }
+  token = {
+    access_token,
+    expires_at: Number(expires_at),
+    remote: true,
+  };
+  sessionStorage.setItem(TOKEN_KEY, JSON.stringify(token));
+}
+
+/** 指定したアクセストークンを Google 側で無効化（遠隔PCの強制ログアウトにも使用） */
+export async function revokeToken(accessToken) {
+  if (!accessToken) return;
+  try {
+    await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(accessToken)}`, {
+      method: 'POST',
+      headers: { 'Content-type': 'application/x-www-form-urlencoded' },
+    });
+  } catch {
+    if (window.google?.accounts?.oauth2) {
+      google.accounts.oauth2.revoke(accessToken, () => {});
+    }
+  }
+}
+
 export function signOut() {
-  if (token) google.accounts.oauth2.revoke(token.access_token, () => {});
+  if (token) revokeToken(token.access_token);
   clearToken();
   localStorage.removeItem('drivebox.signedIn');
 }
@@ -79,4 +109,8 @@ export function hasValidToken() {
 
 export function getToken() {
   return hasValidToken() ? token.access_token : null;
+}
+
+export function getTokenInfo() {
+  return hasValidToken() ? { ...token } : null;
 }

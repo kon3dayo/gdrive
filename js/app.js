@@ -1,10 +1,17 @@
 /**
  * Drive Box - メインアプリ
  */
-import { initAuth, isConfigured, signIn, signOut, clearToken, hasValidToken } from './auth.js';
+import {
+  initAuth, isConfigured, signIn, signOut, clearToken,
+  hasValidToken, getTokenInfo, setRemoteToken,
+} from './auth.js';
 import * as drive from './drive.js';
 import { FOLDER_MIME, AuthError } from './drive.js';
 import { pickFiles } from './picker.js';
+import {
+  generatePairCode, formatPairCode, normalizePairCode,
+  sendTokenToCode, waitForToken, encodeManualKey, decodeManualKey, renderQrSvg,
+} from './remote.js';
 
 // ------------------------------------------------------------
 // DOM ヘルパー
@@ -209,20 +216,67 @@ $$('[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('d
 $$('dialog.modal').forEach((d) => d.addEventListener('click', (e) => { if (e.target === d) d.close('cancel'); }));
 
 // ------------------------------------------------------------
-// ログイン / ログアウト
+// ログイン / ログアウト / 遠隔ログイン（ペアリング）
 // ------------------------------------------------------------
+let pendingPairCode = null;
+let receiveAbort = null;
+let remoteBadgeTimer = null;
+
+function extractPairCodeFromHash() {
+  const m = location.hash.match(/^#\/?pair=(\d{6})$/);
+  return m ? m[1] : null;
+}
+
+function updatePairBanner() {
+  const banner = $('#pair-banner');
+  const remoteBtn = $('#remote-login-btn');
+  const label = $('#login-btn-label');
+  if (pendingPairCode) {
+    banner.hidden = false;
+    $('#pair-banner-code-text').textContent = formatPairCode(pendingPairCode);
+    $('#pair-banner-done').hidden = true;
+    $('#pair-banner-desc').textContent = '下のボタンで Google にログインすると、別PCの画面が自動的にログインされます（別PCにパスワードを入力する必要はありません）。';
+    el.loginBtn.hidden = false;
+    remoteBtn.hidden = true;
+    label.textContent = 'Google でログインして別PCを承認';
+  } else {
+    banner.hidden = true;
+    el.loginBtn.hidden = false;
+    remoteBtn.hidden = false;
+    label.textContent = 'Google でログイン';
+  }
+}
+
 function showLogin(message = '') {
+  clearInterval(remoteBadgeTimer);
   el.app.hidden = true;
   el.login.hidden = false;
   el.loginMsg.textContent = message;
+  updatePairBanner();
   closeAllMenus();
   $$('dialog[open]').forEach((d) => d.close());
+}
+
+function updateRemoteBadge() {
+  const info = getTokenInfo();
+  const badge = $('#remote-badge');
+  if (!info || !info.remote) {
+    badge.hidden = true;
+    return;
+  }
+  const mins = Math.max(1, Math.ceil((info.expires_at - Date.now()) / 60_000));
+  $('#remote-badge-text').textContent = `遠隔ログイン中（残り${mins}分）`;
+  badge.hidden = false;
 }
 
 async function startApp() {
   el.login.hidden = true;
   el.app.hidden = false;
   applyView();
+  updateRemoteBadge();
+  clearInterval(remoteBadgeTimer);
+  remoteBadgeTimer = setInterval(updateRemoteBadge, 30_000);
+
   try {
     const [{ user }, root] = await Promise.all([
       drive.about(),
@@ -249,19 +303,163 @@ el.loginBtn.addEventListener('click', async () => {
   el.loginMsg.textContent = '';
   try {
     await signIn();
+    // スマホでQRコードを読み取ってログインした場合は、そのまま別PCへトークンを暗号化送信
+    if (pendingPairCode) {
+      const code = pendingPairCode;
+      await sendTokenToCode(code, getTokenInfo());
+      $('#pair-banner-desc').textContent = `✅ コード ${formatPairCode(code)} の別PCへログイン許可を送信しました！別PCの画面が自動で切り替わります。`;
+      $('#pair-banner-done').hidden = false;
+      el.loginBtn.hidden = true;
+      return;
+    }
     await startApp();
   } catch (err) {
     el.loginMsg.textContent = err.message;
   }
 });
 
-$('#logout-btn').addEventListener('click', () => {
+$('#pair-revoke-btn').addEventListener('click', () => {
+  pendingPairCode = null;
+  history.replaceState(null, '', location.pathname);
+  signOut();
+  showLogin('別PCのセッションを強制終了（トークン無効化）しました');
+});
+
+$('#pair-continue-btn').addEventListener('click', async () => {
+  pendingPairCode = null;
+  history.replaceState(null, '', '#/');
+  await startApp();
+});
+
+function doLogout(msg = 'ログアウトしました') {
   signOut();
   state.files = [];
   state.folderCache.clear();
   el.files.innerHTML = '';
   $('#avatar-img').hidden = true;
-  showLogin('ログアウトしました');
+  showLogin(msg);
+}
+
+$('#logout-btn').addEventListener('click', () => doLogout());
+$('#remote-badge').addEventListener('click', async () => {
+  const ok = await confirmDialog({
+    title: '遠隔ログインを終了',
+    text: 'このPCからログアウトし、アクセストークンを無効化しますか？',
+    okLabel: 'ログアウト',
+    danger: true,
+  });
+  if (ok) doLogout('遠隔ログインを終了しました');
+});
+
+// ----- 別PC側（遠隔ログインを受ける側） -----
+async function startReceivePairing() {
+  receiveAbort?.abort();
+  receiveAbort = new AbortController();
+  const { signal } = receiveAbort;
+
+  const code = generatePairCode();
+  $('#remote-code-display').textContent = formatPairCode(code);
+  $('#remote-wait-status').innerHTML = '<span class="dot-pulse"></span>承認を待っています…';
+
+  const pairUrl = `${location.origin}${location.pathname}#pair=${code}`;
+  const qrBox = $('#remote-qr');
+  qrBox.innerHTML = '<div class="spinner"></div>';
+  renderQrSvg(pairUrl)
+    .then((svg) => { if (!signal.aborted) qrBox.innerHTML = svg; })
+    .catch(() => { if (!signal.aborted) qrBox.innerHTML = '<span class="muted">QR読込失敗（右の6桁コードをお使いください）</span>'; });
+
+  try {
+    const tok = await waitForToken(code, { signal });
+    setRemoteToken(tok);
+    $('#remote-receive-modal').close();
+    await startApp();
+    toast('遠隔ログインしました（タブを閉じると自動でログアウトします）', { timeout: 6000 });
+  } catch (err) {
+    if (err?.name !== 'AbortError') {
+      $('#remote-wait-status').textContent = `待機エラー: ${err.message}`;
+    }
+  }
+}
+
+$('#remote-login-btn').addEventListener('click', () => {
+  $('#remote-manual-input').value = '';
+  $('#remote-receive-modal').showModal();
+  startReceivePairing();
+});
+
+$('#remote-regenerate-btn').addEventListener('click', () => startReceivePairing());
+$('#remote-receive-modal').addEventListener('close', () => receiveAbort?.abort());
+
+$('#remote-manual-submit').addEventListener('click', async () => {
+  try {
+    const tok = decodeManualKey($('#remote-manual-input').value);
+    setRemoteToken(tok);
+    $('#remote-receive-modal').close();
+    await startApp();
+    toast('遠隔ログインしました（タブを閉じると自動でログアウトします）', { timeout: 6000 });
+  } catch (err) {
+    toast(err.message, { type: 'error' });
+  }
+});
+
+// ----- スマホ・メインPC側（別PCを遠隔ログインさせる側） -----
+function openRemoteSendModal(prefillCode = '') {
+  closeAllMenus();
+  const info = getTokenInfo();
+  if (!info) return;
+  const input = $('#remote-send-code');
+  input.value = prefillCode ? formatPairCode(prefillCode) : '';
+  $('#remote-send-status').hidden = true;
+  $('#remote-revoke-bar').hidden = true;
+  $('#remote-manual-key').value = encodeManualKey(info);
+  $('#remote-send-modal').showModal();
+  input.focus();
+}
+
+$('#remote-send-btn').addEventListener('click', () => openRemoteSendModal());
+$('#remote-send-menu-btn').addEventListener('click', () => openRemoteSendModal());
+
+$('#remote-send-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const statusEl = $('#remote-send-status');
+  const submitBtn = $('#remote-send-submit');
+  const code = normalizePairCode($('#remote-send-code').value);
+  if (!code) {
+    statusEl.hidden = false;
+    statusEl.className = 'remote-send-status danger';
+    statusEl.textContent = '6桁の数字コードを入力してください';
+    return;
+  }
+  submitBtn.disabled = true;
+  statusEl.hidden = false;
+  statusEl.className = 'remote-send-status';
+  statusEl.textContent = '暗号化して送信中…';
+  try {
+    await sendTokenToCode(code, getTokenInfo());
+    statusEl.textContent = `✅ コード ${formatPairCode(code)} の別PCへログイン許可を送信しました！`;
+    $('#remote-revoke-bar').hidden = false;
+  } catch (err) {
+    statusEl.className = 'remote-send-status danger';
+    statusEl.textContent = err.message;
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+$('#remote-revoke-all-btn').addEventListener('click', () => {
+  $('#remote-send-modal').close();
+  doLogout('別PCを含めすべてのセッションを無効化しました');
+});
+
+$('#remote-manual-copy').addEventListener('click', async () => {
+  const input = $('#remote-manual-key');
+  try {
+    await navigator.clipboard.writeText(input.value);
+  } catch {
+    input.select();
+    document.execCommand('copy');
+  }
+  toast('ログインキーをコピーしました。別PCで貼り付けてください');
 });
 
 // ------------------------------------------------------------
@@ -278,6 +476,17 @@ function parseHash() {
 }
 
 function route() {
+  const pair = extractPairCodeFromHash();
+  if (pair) {
+    if (hasValidToken()) {
+      history.replaceState(null, '', '#/');
+      openRemoteSendModal(pair);
+    } else {
+      pendingPairCode = pair;
+      showLogin('');
+      return;
+    }
+  }
   if (!hasValidToken()) return;
   state.route = parseHash();
   $$('.nav-item').forEach((a) => a.classList.toggle('active', a.dataset.nav === state.route.type));
@@ -1118,6 +1327,7 @@ async function readEntry(entry, path) {
 // 起動
 // ------------------------------------------------------------
 (async function boot() {
+  pendingPairCode = extractPairCodeFromHash();
   if (!isConfigured()) {
     showLogin('');
     el.loginMsg.innerHTML = '⚙️ セットアップが必要です。<code>js/config.js</code> に Google Cloud の設定値を入力してください（手順は <code>docs/SETUP.md</code>）。';
@@ -1125,11 +1335,16 @@ async function readEntry(entry, path) {
   }
   try {
     await initAuth();
+    el.loginBtn.disabled = false;
   } catch (err) {
+    // 共有PC等で accounts.google.com がブロックされていても、遠隔ログインは利用可能にする
+    if (hasValidToken()) {
+      startApp();
+      return;
+    }
     showLogin(err.message);
     return;
   }
-  el.loginBtn.disabled = false;
   if (hasValidToken()) startApp();
-  else showLogin(localStorage.getItem('drivebox.signedIn') ? 'もう一度ログインしてください' : '');
+  else showLogin(!pendingPairCode && localStorage.getItem('drivebox.signedIn') ? 'もう一度ログインしてください' : '');
 })();
