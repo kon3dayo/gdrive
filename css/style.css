@@ -165,8 +165,9 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 .login-screen {
   min-height: 100%;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
-  padding: 24px;
+  padding: 16px;
   background:
     radial-gradient(1200px 600px at 10% -10%, rgba(79, 140, 255, .18), transparent 60%),
     radial-gradient(900px 500px at 110% 110%, rgba(123, 92, 255, .18), transparent 60%),
@@ -174,10 +175,11 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
 }
 .login-card {
   width: 100%;
+  min-width: 0;
   max-width: 440px;
   background: var(--surface);
   border-radius: 28px;
-  padding: 48px 36px 36px;
+  padding: 40px 24px 32px;
   text-align: center;
   box-shadow: var(--shadow-3);
   animation: rise .4s ease-out;
