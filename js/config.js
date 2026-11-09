@@ -8,14 +8,14 @@
  *   - API_KEY は必ず「HTTP リファラー制限」と「API 制限」をかけてください
  */
 export const CONFIG = {
-  // OAuth 2.0 クライアント ID（例: 1234567890-abcdefg.apps.googleusercontent.com）
-  CLIENT_ID: 'YOUR_CLIENT_ID.apps.googleusercontent.com',
+  // OAuth 2.0 クライアント ID
+  CLIENT_ID: '677359419581-45ftik3pfee8d19ovj65ejnj75m11ch8.apps.googleusercontent.com',
 
   // API キー（Google Picker 用）
-  API_KEY: 'YOUR_API_KEY',
+  API_KEY: 'AIzaSyDLRLj7xOZPgHiRhJJTApyf4USFkMUPL0s',
 
-  // プロジェクト番号（数字のみ。Google Picker でファイルへのアクセス権を付与するのに必要）
-  APP_ID: 'YOUR_PROJECT_NUMBER',
+  // プロジェクト番号（CLIENT_ID の先頭の数字と同じ）
+  APP_ID: '677359419581',
 };
 
 // アプリが要求する権限（変更不要）
