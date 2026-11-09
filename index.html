@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Drive Box - Google Drive ファイルマネージャー</title>
+  <meta name="description" content="Google Drive と連携してファイルのアップロード・ダウンロード・共有ができるウェブアプリ" />
+  <meta name="theme-color" content="#1a73e8" />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=block" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script>
+    // テーマのちらつき防止（CSS 読み込み前に適用）
+    (function () {
+      var t = localStorage.getItem('theme');
+      if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+    })();
+  </script>
+</head>
+<body>
+  <!-- ===== ログイン画面 ===== -->
+  <section id="login-screen" class="login-screen" hidden>
+    <div class="login-card">
+      <img src="assets/favicon.svg" alt="" class="login-logo" width="64" height="64" />
+      <h1>Drive Box</h1>
+      <p class="login-lead">Google Drive のファイルを、もっと手軽に。<br />アップロード・ダウンロード・共有をブラウザから。</p>
+      <button id="login-btn" class="btn btn-primary btn-lg" disabled>
+        <svg class="g-logo" viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+        Google でログイン
+      </button>
+      <p id="login-message" class="login-message" role="alert"></p>
+      <p class="login-note">
+        このアプリは、<strong>このアプリで作成したファイル</strong>と<strong>あなたが選んだファイル</strong>にだけアクセスします。
+        データはブラウザと Google Drive の間で直接やり取りされ、外部サーバーには送信されません。
+      </p>
+    </div>
+  </section>
+
+  <!-- ===== メインアプリ ===== -->
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <button class="icon-btn only-mobile" id="menu-btn" aria-label="メニュー"><span class="ms">menu</span></button>
+      <a class="brand" href="#/">
+        <img src="assets/favicon.svg" alt="" width="36" height="36" />
+        <span>Drive Box</span>
+      </a>
+      <form class="search" id="search-form" role="search">
+        <span class="ms search-icon">search</span>
+        <input type="search" id="search-input" placeholder="ファイルを検索" autocomplete="off" aria-label="ファイルを検索" />
+        <button type="button" class="icon-btn search-clear" id="search-clear" aria-label="検索をクリア" hidden><span class="ms">close</span></button>
+      </form>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="theme-btn" aria-label="テーマ切り替え" title="テーマ切り替え"><span class="ms">dark_mode</span></button>
+        <div class="user-menu">
+          <button class="avatar-btn" id="avatar-btn" aria-label="アカウント" aria-haspopup="true">
+            <img id="avatar-img" alt="" referrerpolicy="no-referrer" hidden />
+            <span id="avatar-initial" class="avatar-initial">?</span>
+          </button>
+          <div class="dropdown" id="user-dropdown" hidden>
+            <div class="dropdown-user">
+              <strong id="user-name"></strong>
+              <span id="user-email"></span>
+            </div>
+            <button class="dropdown-item" id="logout-btn"><span class="ms">logout</span>ログアウト</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <aside class="sidebar" id="sidebar">
+      <div class="new-wrap">
+        <button class="btn-new" id="new-btn" aria-haspopup="true"><span class="ms">add</span>新規</button>
+        <div class="dropdown new-dropdown" id="new-dropdown" hidden>
+          <button class="dropdown-item" data-action="new-folder"><span class="ms">create_new_folder</span>新しいフォルダ</button>
+          <hr />
+          <button class="dropdown-item" data-action="upload-file"><span class="ms">upload_file</span>ファイルのアップロード</button>
+          <button class="dropdown-item" data-action="upload-folder"><span class="ms">drive_folder_upload</span>フォルダのアップロード</button>
+          <hr />
+          <button class="dropdown-item" data-action="pick"><span class="ms">add_to_drive</span>Drive から既存ファイルを追加</button>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="#/" class="nav-item" data-nav="root"><span class="ms">home_storage</span>マイドライブ</a>
+        <a href="#/recent" class="nav-item" data-nav="recent"><span class="ms">schedule</span>アクセス可能なファイル</a>
+      </nav>
+      <div class="sidebar-help">
+        <span class="ms">info</span>
+        <p>Drive にある既存ファイルを使うには「新規 → Drive から既存ファイルを追加」で選択してください。</p>
+      </div>
+    </aside>
+    <div class="scrim" id="scrim" hidden></div>
+
+    <main class="main" id="main">
+      <div class="main-head">
+        <nav class="breadcrumb" id="breadcrumb" aria-label="パンくずリスト"></nav>
+        <div class="view-tools">
+          <select id="sort-select" class="sort-select" aria-label="並び替え">
+            <option value="name">名前</option>
+            <option value="modifiedTime desc">更新日時（新しい順）</option>
+            <option value="modifiedTime">更新日時（古い順）</option>
+            <option value="quotaBytesUsed desc">サイズ（大きい順）</option>
+          </select>
+          <button class="icon-btn" id="refresh-btn" aria-label="再読み込み" title="再読み込み"><span class="ms">refresh</span></button>
+          <button class="icon-btn" id="view-btn" aria-label="表示切り替え" title="表示切り替え"><span class="ms">grid_view</span></button>
+        </div>
+      </div>
+
+      <div class="file-area" id="file-area">
+        <div class="list-header" id="list-header">
+          <span class="col-name">名前</span>
+          <span class="col-date">更新日時</span>
+          <span class="col-size">サイズ</span>
+          <span class="col-actions"></span>
+        </div>
+        <div class="files" id="files" role="list"></div>
+        <div class="empty" id="empty" hidden>
+          <span class="ms">cloud_upload</span>
+          <p id="empty-text">ファイルをここにドロップ<br />または「新規」ボタンからアップロード</p>
+        </div>
+        <div class="loading" id="loading" hidden><div class="spinner"></div></div>
+        <div id="sentinel" class="sentinel"></div>
+      </div>
+
+      <div class="drop-overlay" id="drop-overlay" hidden>
+        <div class="drop-box">
+          <span class="ms">upload</span>
+          <p id="drop-text">ドロップしてアップロード</p>
+        </div>
+      </div>
+    </main>
+
+    <button class="fab only-mobile" id="fab" aria-label="新規"><span class="ms">add</span></button>
+  </div>
+
+  <!-- ===== コンテキストメニュー ===== -->
+  <div class="dropdown context-menu" id="context-menu" hidden role="menu">
+    <button class="dropdown-item" data-act="open"><span class="ms">visibility</span>プレビュー</button>
+    <button class="dropdown-item" data-act="download"><span class="ms">download</span>ダウンロード</button>
+    <button class="dropdown-item" data-act="rename"><span class="ms">edit</span>名前を変更</button>
+    <button class="dropdown-item" data-act="share"><span class="ms">link</span>共有リンクを発行</button>
+    <button class="dropdown-item" data-act="drive"><span class="ms">open_in_new</span>Google Drive で開く</button>
+    <hr />
+    <button class="dropdown-item danger" data-act="trash"><span class="ms">delete</span>ゴミ箱に移動</button>
+  </div>
+
+  <!-- ===== モーダル ===== -->
+  <dialog class="modal" id="prompt-modal">
+    <form method="dialog" class="modal-body" id="prompt-form">
+      <h2 id="prompt-title"></h2>
+      <input type="text" id="prompt-input" class="text-input" required />
+      <div class="modal-actions">
+        <button type="button" class="btn btn-text" value="cancel" data-close>キャンセル</button>
+        <button type="submit" class="btn btn-primary" id="prompt-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="confirm-modal">
+    <form method="dialog" class="modal-body">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-text" data-close>キャンセル</button>
+        <button type="submit" class="btn btn-primary" id="confirm-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="share-modal">
+    <form method="dialog" class="modal-body">
+      <h2>共有リンク</h2>
+      <p class="muted">リンクを知っている全員が閲覧できます。</p>
+      <div class="share-row">
+        <input type="text" id="share-input" class="text-input" readonly />
+        <button type="button" class="btn btn-primary" id="share-copy"><span class="ms">content_copy</span>コピー</button>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-text danger" id="share-revoke">共有を解除</button>
+        <button type="submit" class="btn btn-text">閉じる</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="preview" id="preview-modal">
+    <div class="preview-bar">
+      <button class="icon-btn" data-close aria-label="閉じる"><span class="ms">arrow_back</span></button>
+      <img id="preview-icon" alt="" width="20" height="20" />
+      <span class="preview-name" id="preview-name"></span>
+      <div class="preview-actions">
+        <button class="icon-btn" id="preview-download" aria-label="ダウンロード" title="ダウンロード"><span class="ms">download</span></button>
+        <button class="icon-btn" id="preview-share" aria-label="共有リンク" title="共有リンク"><span class="ms">link</span></button>
+        <button class="icon-btn" id="preview-drive" aria-label="Drive で開く" title="Google Drive で開く"><span class="ms">open_in_new</span></button>
+      </div>
+    </div>
+    <div class="preview-content" id="preview-content"></div>
+  </dialog>
+
+  <!-- ===== アップロード進捗 ===== -->
+  <section class="uploads" id="uploads" hidden aria-live="polite">
+    <header class="uploads-head">
+      <span id="uploads-title">アップロード中</span>
+      <button class="icon-btn" id="uploads-toggle" aria-label="折りたたむ"><span class="ms">expand_more</span></button>
+      <button class="icon-btn" id="uploads-close" aria-label="閉じる"><span class="ms">close</span></button>
+    </header>
+    <ul class="uploads-list" id="uploads-list"></ul>
+  </section>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <input type="file" id="file-input" multiple hidden />
+  <input type="file" id="folder-input" webkitdirectory multiple hidden />
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
