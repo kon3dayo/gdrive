@@ -4,9 +4,9 @@
  */
 import { CONFIG, SCOPES } from './config.js';
 
-const TOKEN_KEY = 'drivebox.token';
+const TOKEN_KEY = 'drivebox.token.v2';
 let tokenClient = null;
-let token = null; // { access_token, expires_at, remote?: boolean }
+let token = null; // { access_token, expires_at }
 
 export function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -26,9 +26,9 @@ export function isConfigured() {
 }
 
 export async function initAuth() {
-  // 同じタブ内のリロードではログイン状態を維持（トークンの有効期限は約 1 時間）
+  // トークンの有効期限内ならリロードや別タブでもログイン状態を維持
   try {
-    const saved = JSON.parse(sessionStorage.getItem(TOKEN_KEY) || 'null');
+    const saved = JSON.parse(localStorage.getItem(TOKEN_KEY) || 'null');
     if (saved && saved.expires_at > Date.now() + 60_000) token = saved;
   } catch { /* ignore */ }
 
@@ -40,6 +40,15 @@ export async function initAuth() {
   });
 }
 
+function saveToken(access_token, expires_at) {
+  token = {
+    access_token,
+    expires_at: Number(expires_at),
+  };
+  localStorage.setItem(TOKEN_KEY, JSON.stringify(token));
+  localStorage.setItem('drivebox.signedIn', '1');
+}
+
 /** ログインポップアップを表示してトークンを取得（ユーザー操作から呼ぶこと） */
 export function signIn({ prompt = '' } = {}) {
   return new Promise((resolve, reject) => {
@@ -48,13 +57,7 @@ export function signIn({ prompt = '' } = {}) {
       if (!google.accounts.oauth2.hasGrantedAllScopes(resp, SCOPES)) {
         return reject(new Error('Google Drive へのアクセスが許可されませんでした。チェックボックスをオンにしてもう一度お試しください。'));
       }
-      token = {
-        access_token: resp.access_token,
-        expires_at: Date.now() + Number(resp.expires_in) * 1000,
-        remote: false,
-      };
-      sessionStorage.setItem(TOKEN_KEY, JSON.stringify(token));
-      localStorage.setItem('drivebox.signedIn', '1');
+      saveToken(resp.access_token, Date.now() + Number(resp.expires_in) * 1000);
       resolve(token.access_token);
     };
     tokenClient.error_callback = (err) => {
@@ -64,20 +67,15 @@ export function signIn({ prompt = '' } = {}) {
   });
 }
 
-/** 遠隔ログインで受け取ったトークンをセット（sessionStorage のみに保存し、タブを閉じたら消える） */
+/** 遠隔ログインで受け取ったトークンを通常のログインと同じ扱いで保存 */
 export function setRemoteToken({ access_token, expires_at }) {
   if (!access_token || !expires_at || expires_at <= Date.now() + 30_000) {
     throw new Error('トークンの有効期限が切れています');
   }
-  token = {
-    access_token,
-    expires_at: Number(expires_at),
-    remote: true,
-  };
-  sessionStorage.setItem(TOKEN_KEY, JSON.stringify(token));
+  saveToken(access_token, expires_at);
 }
 
-/** 指定したアクセストークンを Google 側で無効化（遠隔PCの強制ログアウトにも使用） */
+/** 指定したアクセストークンを Google 側で無効化 */
 export async function revokeToken(accessToken) {
   if (!accessToken) return;
   try {
@@ -100,7 +98,7 @@ export function signOut() {
 
 export function clearToken() {
   token = null;
-  sessionStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_KEY);
 }
 
 export function hasValidToken() {

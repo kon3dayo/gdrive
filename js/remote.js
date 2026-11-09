@@ -84,6 +84,7 @@ async function encryptToken(aesKey, tokenInfo) {
   const plain = enc.encode(JSON.stringify({
     access_token: tokenInfo.access_token,
     expires_at: tokenInfo.expires_at,
+    pinned: tokenInfo.pinned || [],
     ts: Date.now(),
   }));
   const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, aesKey, plain));
@@ -106,7 +107,11 @@ async function decryptToken(aesKey, message) {
     if (!data.access_token || !data.expires_at || Math.abs(Date.now() - Number(data.ts || 0)) > 10 * 60_000) {
       return null;
     }
-    return { access_token: data.access_token, expires_at: Number(data.expires_at) };
+    return {
+      access_token: data.access_token,
+      expires_at: Number(data.expires_at),
+      pinned: Array.isArray(data.pinned) ? data.pinned : [],
+    };
   } catch {
     return null;
   }
@@ -192,6 +197,7 @@ export function encodeManualKey(tokenInfo) {
   const payload = JSON.stringify({
     a: tokenInfo.access_token,
     e: tokenInfo.expires_at,
+    p: tokenInfo.pinned || [],
   });
   return `DBX1.${toBase64Url(enc.encode(payload))}`;
 }
@@ -202,7 +208,11 @@ export function decodeManualKey(str) {
   try {
     const data = JSON.parse(dec.decode(fromBase64Url(trimmed.slice(5))));
     if (!data.a || !data.e) throw new Error();
-    return { access_token: data.a, expires_at: Number(data.e) };
+    return {
+      access_token: data.a,
+      expires_at: Number(data.e),
+      pinned: Array.isArray(data.p) ? data.p : [],
+    };
   } catch {
     throw new Error('ログインキーの形式が正しくありません');
   }

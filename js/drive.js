@@ -60,9 +60,11 @@ export function about() {
  *  - search 指定: 名前で検索
  *  - どちらもなし: アプリがアクセスできる全ファイル
  */
-export function listFiles({ folderId, search, orderBy = 'folder,name', pageToken } = {}) {
+export function listFiles({ folderId, search, sharedWithMe, onlyFolders, orderBy = 'folder,name', pageToken } = {}) {
   const q = ['trashed = false'];
   if (folderId) q.push(`'${esc(folderId)}' in parents`);
+  if (sharedWithMe) q.push('sharedWithMe = true');
+  if (onlyFolders) q.push(`mimeType = '${FOLDER_MIME}'`);
   if (search) q.push(`name contains '${esc(search)}'`);
   return json(`${API}/files?${qs({
     q: q.join(' and '),

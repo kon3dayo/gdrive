@@ -57,7 +57,6 @@
 
       <p id="login-message" class="login-message" role="alert"></p>
       <p class="login-note">
-        このアプリは、<strong>このアプリで作成したファイル</strong>と<strong>あなたが選んだファイル</strong>にだけアクセスします。
         データはブラウザと Google Drive の間で直接やり取りされ、外部サーバーには送信されません。
       </p>
     </div>
@@ -77,10 +76,6 @@
         <button type="button" class="icon-btn search-clear" id="search-clear" aria-label="検索をクリア" hidden><span class="ms">close</span></button>
       </form>
       <div class="topbar-actions">
-        <button class="remote-session-badge" id="remote-badge" hidden title="クリックしてログアウト（権限も無効化）">
-          <span class="ms">phonelink_lock</span>
-          <span id="remote-badge-text">遠隔ログイン中</span>
-        </button>
         <button class="icon-btn" id="remote-send-btn" aria-label="別PCを遠隔ログインさせる" title="別PCを遠隔ログインさせる"><span class="ms">devices</span></button>
         <button class="icon-btn" id="theme-btn" aria-label="テーマ切り替え" title="テーマ切り替え"><span class="ms">dark_mode</span></button>
         <div class="user-menu">
@@ -109,16 +104,21 @@
           <button class="dropdown-item" data-action="upload-file"><span class="ms">upload_file</span>ファイルのアップロード</button>
           <button class="dropdown-item" data-action="upload-folder"><span class="ms">drive_folder_upload</span>フォルダのアップロード</button>
           <hr />
-          <button class="dropdown-item" data-action="pick"><span class="ms">add_to_drive</span>Drive から既存ファイルを追加</button>
+          <button class="dropdown-item" data-action="pick"><span class="ms">create_new_folder</span>Drive からフォルダ・ファイルを選択</button>
         </div>
       </div>
       <nav class="nav">
         <a href="#/" class="nav-item" data-nav="root"><span class="ms">home_storage</span>マイドライブ</a>
-        <a href="#/recent" class="nav-item" data-nav="recent"><span class="ms">schedule</span>アクセス可能なファイル</a>
+        <a href="#/shared" class="nav-item" data-nav="shared"><span class="ms">group</span>共有アイテム</a>
+        <a href="#/recent" class="nav-item" data-nav="recent"><span class="ms">schedule</span>最近のファイル</a>
       </nav>
+      <div class="pinned-section" id="pinned-section" hidden>
+        <div class="pinned-header">選択したフォルダ</div>
+        <div class="pinned-list" id="pinned-list"></div>
+      </div>
       <div class="sidebar-help">
-        <span class="ms">info</span>
-        <p>Drive にある既存ファイルを使うには「新規 → Drive から既存ファイルを追加」で選択してください。</p>
+        <span class="ms">folder_Copy</span>
+        <p>フォルダを選ぶと、その傘下のサブフォルダ・ファイルすべてにアクセスできます。</p>
       </div>
     </aside>
     <div class="scrim" id="scrim" hidden></div>

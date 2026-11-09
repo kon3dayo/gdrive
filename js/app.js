@@ -220,7 +220,68 @@ $$('dialog.modal').forEach((d) => d.addEventListener('click', (e) => { if (e.tar
 // ------------------------------------------------------------
 let pendingPairCode = null;
 let receiveAbort = null;
-let remoteBadgeTimer = null;
+const PINNED_KEY = 'drivebox.pinnedFolders';
+
+function getPinnedFolders() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(PINNED_KEY) || '[]');
+    return Array.isArray(arr) ? arr.filter((x) => x && x.id && x.name) : [];
+  } catch {
+    return [];
+  }
+}
+
+function addPinnedFolders(folders) {
+  if (!Array.isArray(folders) || !folders.length) return;
+  const list = getPinnedFolders();
+  for (const f of folders) {
+    if (f && f.id && f.name && !list.some((x) => x.id === f.id)) {
+      list.push({ id: f.id, name: f.name });
+    }
+  }
+  localStorage.setItem(PINNED_KEY, JSON.stringify(list));
+  renderPinnedFolders();
+}
+
+function removePinnedFolder(id) {
+  const list = getPinnedFolders().filter((x) => x.id !== id);
+  localStorage.setItem(PINNED_KEY, JSON.stringify(list));
+  renderPinnedFolders();
+}
+
+function renderPinnedFolders() {
+  const sec = $('#pinned-section');
+  const listEl = $('#pinned-list');
+  if (!sec || !listEl) return;
+  const list = getPinnedFolders();
+  sec.hidden = list.length === 0;
+  const curFolderId = state.route.type === 'folder' ? state.route.id : null;
+  listEl.innerHTML = list.map((f) => `
+    <div class="pinned-item ${curFolderId === f.id ? 'active' : ''}">
+      <a href="#/folder/${encodeURIComponent(f.id)}" class="pinned-link" title="${escapeHtml(f.name)}">
+        <span class="ms">folder</span>
+        <span>${escapeHtml(f.name)}</span>
+      </a>
+      <button type="button" class="icon-btn pinned-remove" data-remove-pin="${escapeHtml(f.id)}" title="一覧から外す">
+        <span class="ms">close</span>
+      </button>
+    </div>
+  `).join('');
+}
+
+$('#pinned-list')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-remove-pin]');
+  if (btn) {
+    e.preventDefault();
+    e.stopPropagation();
+    removePinnedFolder(btn.dataset.removePin);
+  }
+});
+
+function getTokenWithPinned() {
+  const info = getTokenInfo();
+  return info ? { ...info, pinned: getPinnedFolders() } : null;
+}
 
 function extractPairCodeFromHash() {
   const m = location.hash.match(/^#\/?pair=(\d{6})$/);
@@ -248,7 +309,6 @@ function updatePairBanner() {
 }
 
 function showLogin(message = '') {
-  clearInterval(remoteBadgeTimer);
   el.app.hidden = true;
   el.login.hidden = false;
   el.loginMsg.textContent = message;
@@ -257,25 +317,11 @@ function showLogin(message = '') {
   $$('dialog[open]').forEach((d) => d.close());
 }
 
-function updateRemoteBadge() {
-  const info = getTokenInfo();
-  const badge = $('#remote-badge');
-  if (!info || !info.remote) {
-    badge.hidden = true;
-    return;
-  }
-  const mins = Math.max(1, Math.ceil((info.expires_at - Date.now()) / 60_000));
-  $('#remote-badge-text').textContent = `遠隔ログイン中（残り${mins}分）`;
-  badge.hidden = false;
-}
-
 async function startApp() {
   el.login.hidden = true;
   el.app.hidden = false;
   applyView();
-  updateRemoteBadge();
-  clearInterval(remoteBadgeTimer);
-  remoteBadgeTimer = setInterval(updateRemoteBadge, 30_000);
+  renderPinnedFolders();
 
   try {
     const [{ user }, root] = await Promise.all([
@@ -306,7 +352,7 @@ el.loginBtn.addEventListener('click', async () => {
     // スマホでQRコードを読み取ってログインした場合は、そのまま別PCへトークンを暗号化送信
     if (pendingPairCode) {
       const code = pendingPairCode;
-      await sendTokenToCode(code, getTokenInfo());
+      await sendTokenToCode(code, getTokenWithPinned());
       $('#pair-banner-desc').textContent = `✅ コード ${formatPairCode(code)} の別PCへログイン許可を送信しました！別PCの画面が自動で切り替わります。`;
       $('#pair-banner-done').hidden = false;
       el.loginBtn.hidden = true;
@@ -341,15 +387,6 @@ function doLogout(msg = 'ログアウトしました') {
 }
 
 $('#logout-btn').addEventListener('click', () => doLogout());
-$('#remote-badge').addEventListener('click', async () => {
-  const ok = await confirmDialog({
-    title: '遠隔ログインを終了',
-    text: 'このPCからログアウトし、アクセストークンを無効化しますか？',
-    okLabel: 'ログアウト',
-    danger: true,
-  });
-  if (ok) doLogout('遠隔ログインを終了しました');
-});
 
 // ----- 別PC側（遠隔ログインを受ける側） -----
 async function startReceivePairing() {
@@ -371,9 +408,10 @@ async function startReceivePairing() {
   try {
     const tok = await waitForToken(code, { signal });
     setRemoteToken(tok);
+    if (tok.pinned?.length) addPinnedFolders(tok.pinned);
     $('#remote-receive-modal').close();
     await startApp();
-    toast('遠隔ログインしました（タブを閉じると自動でログアウトします）', { timeout: 6000 });
+    toast('ログインしました');
   } catch (err) {
     if (err?.name !== 'AbortError') {
       $('#remote-wait-status').textContent = `待機エラー: ${err.message}`;
@@ -394,9 +432,10 @@ $('#remote-manual-submit').addEventListener('click', async () => {
   try {
     const tok = decodeManualKey($('#remote-manual-input').value);
     setRemoteToken(tok);
+    if (tok.pinned?.length) addPinnedFolders(tok.pinned);
     $('#remote-receive-modal').close();
     await startApp();
-    toast('遠隔ログインしました（タブを閉じると自動でログアウトします）', { timeout: 6000 });
+    toast('ログインしました');
   } catch (err) {
     toast(err.message, { type: 'error' });
   }
@@ -405,7 +444,7 @@ $('#remote-manual-submit').addEventListener('click', async () => {
 // ----- スマホ・メインPC側（別PCを遠隔ログインさせる側） -----
 function openRemoteSendModal(prefillCode = '') {
   closeAllMenus();
-  const info = getTokenInfo();
+  const info = getTokenWithPinned();
   if (!info) return;
   const input = $('#remote-send-code');
   input.value = prefillCode ? formatPairCode(prefillCode) : '';
@@ -435,7 +474,7 @@ $('#remote-send-form').addEventListener('submit', async (e) => {
   statusEl.className = 'remote-send-status';
   statusEl.textContent = '暗号化して送信中…';
   try {
-    await sendTokenToCode(code, getTokenInfo());
+    await sendTokenToCode(code, getTokenWithPinned());
     statusEl.textContent = `✅ コード ${formatPairCode(code)} の別PCへログイン許可を送信しました！`;
     $('#remote-revoke-bar').hidden = false;
   } catch (err) {
@@ -470,6 +509,7 @@ function parseHash() {
   const [type, ...rest] = h.split('/');
   const arg = decodeURIComponent(rest.join('/'));
   if (type === 'folder' && arg) return { type: 'folder', id: arg };
+  if (type === 'shared') return { type: 'shared' };
   if (type === 'recent') return { type: 'recent' };
   if (type === 'search' && arg) return { type: 'search', query: arg };
   return { type: 'root' };
@@ -490,6 +530,7 @@ function route() {
   if (!hasValidToken()) return;
   state.route = parseHash();
   $$('.nav-item').forEach((a) => a.classList.toggle('active', a.dataset.nav === state.route.type));
+  renderPinnedFolders();
   if (state.route.type === 'search') {
     el.searchInput.value = state.route.query;
     el.searchClear.hidden = false;
@@ -548,7 +589,8 @@ async function renderBreadcrumb() {
   const sep = '<span class="ms crumb-sep">chevron_right</span>';
 
   if (r.type === 'root') el.breadcrumb.innerHTML = crumb('マイドライブ');
-  else if (r.type === 'recent') el.breadcrumb.innerHTML = crumb('アクセス可能なファイル');
+  else if (r.type === 'shared') el.breadcrumb.innerHTML = crumb('共有アイテム');
+  else if (r.type === 'recent') el.breadcrumb.innerHTML = crumb('最近のファイル');
   else if (r.type === 'search') el.breadcrumb.innerHTML = crumb(`「${r.query}」の検索結果`);
   else {
     el.breadcrumb.innerHTML = crumb('マイドライブ', '#/') + sep + '<span class="crumb current">…</span>';
@@ -574,6 +616,7 @@ function listParams() {
   const orderBy = sort === 'name' ? 'folder,name' : `folder,${sort}`;
   if (r.type === 'root') return { folderId: 'root', orderBy };
   if (r.type === 'folder') return { folderId: r.id, orderBy };
+  if (r.type === 'shared') return { sharedWithMe: true, orderBy };
   if (r.type === 'search') return { search: r.query, orderBy };
   return { orderBy: sort === 'name' ? 'modifiedTime desc' : sort };
 }
@@ -972,15 +1015,17 @@ async function doPick() {
   try {
     const picked = await pickFiles();
     if (!picked.length) return;
-    toast(`${picked.length} 件のファイルへのアクセスを追加しました`);
-    if (picked.length === 1 && picked[0].mimeType === FOLDER_MIME) {
-      location.hash = `#/folder/${encodeURIComponent(picked[0].id)}`;
-    } else if (state.route.type === 'recent') {
-      loadFiles({ silent: true });
-    } else {
-      location.hash = '#/recent';
+    const folders = picked.filter((x) => x.mimeType === FOLDER_MIME);
+    if (folders.length) {
+      addPinnedFolders(folders);
+      toast(`フォルダ「${folders[0].name}」（傘下すべて）を追加しました`);
+      location.hash = `#/folder/${encodeURIComponent(folders[0].id)}`;
+      return;
     }
-  } catch (err) { handleError(err, 'ファイルの選択'); }
+    toast(`${picked.length} 件を選択しました`);
+    const file = await drive.getFile(picked[0].id);
+    openPreview(file);
+  } catch (err) { handleError(err, 'フォルダ・ファイルの選択'); }
 }
 
 // ------------------------------------------------------------

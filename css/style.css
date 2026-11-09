@@ -918,7 +918,112 @@ dialog { color: var(--text); }
     text-align: center;
   }
   .remote-code-box { align-items: center; }
-  #remote-badge-text { display: none; }
+}
+
+/* ---------- サイドバー：選択したフォルダ & 内蔵ピッカー ---------- */
+.pinned-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pinned-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  padding: 4px 16px;
+}
+.pinned-item {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  border-radius: 100px;
+  padding: 0 4px 0 16px;
+}
+.pinned-item:hover { background: var(--hover); }
+.pinned-item.active { background: var(--selected); }
+.pinned-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-2);
+  font-weight: 500;
+}
+.pinned-link span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pinned-link .ms { font-size: 20px; }
+.pinned-remove { width: 28px; height: 28px; opacity: 0.6; }
+.pinned-remove .ms { font-size: 16px; }
+.pinned-remove:hover { opacity: 1; }
+
+.picker-modal { width: min(94vw, 640px); }
+.picker-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 10px;
+  flex-wrap: wrap;
+}
+.picker-tab {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 100px;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-weight: 500;
+}
+.picker-tab.active {
+  background: var(--selected);
+  border-color: transparent;
+}
+.picker-search {
+  flex: 1;
+  min-width: 160px;
+  height: 36px;
+  font-size: 13px;
+}
+.picker-nav {
+  font-size: 13px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.picker-crumb {
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.picker-crumb:hover { background: var(--hover); }
+.picker-list {
+  height: 320px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border);
+}
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.picker-row:hover { background: var(--hover); }
+.picker-row.selected { background: var(--selected); }
+.picker-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: reduce) {

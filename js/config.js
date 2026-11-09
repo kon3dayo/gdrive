@@ -18,6 +18,6 @@ export const CONFIG = {
   APP_ID: '677359419581',
 };
 
-// アプリが要求する権限（変更不要）
-// drive.file = このアプリで作成したファイル / ユーザーが Picker で選んだファイルのみにアクセス
-export const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+// アプリが要求する権限
+// フォルダ選択時にその傘下のサブフォルダ・ファイルすべてにアクセスできるよう drive スコープを使用
+export const SCOPES = 'https://www.googleapis.com/auth/drive';
